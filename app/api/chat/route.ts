@@ -1,10 +1,9 @@
-import { InferenceClient } from "@huggingface/inference";
+import { createOpenAI } from "@ai-sdk/openai";
+import { streamText } from "ai";
 import { getKnowledgeBase } from "@/lib/knowledge";
 import { getSystemPrompt } from "@/lib/prompt";
 
 export const maxDuration = 30;
-
-const client = new InferenceClient(process.env.HF_TOKEN);
 
 export async function POST(req: Request) {
   try {
@@ -21,57 +20,21 @@ export async function POST(req: Request) {
     const knowledgeBase = await getKnowledgeBase();
     const systemPrompt = getSystemPrompt(knowledgeBase);
 
-    const sanitizedMessages = messages.map((m: any) => ({
-      role: m.role,
-      content: m.content
-    }));
-
-    const hfMessages = [
-      { role: "system", content: systemPrompt },
-      ...sanitizedMessages
-    ];
-
-    let stream;
-    try {
-      stream = await client.chatCompletionStream({
-        model: "Qwen/Qwen3.8-27B:novita",
-        messages: hfMessages,
-        temperature: 0.1,
-      });
-    } catch (apiError) {
-      console.error("HuggingFace API initialization error:", apiError);
-      return new Response(
-        JSON.stringify({ error: "Failed to initialize chat stream with the AI provider." }),
-        { status: 500, headers: { "Content-Type": "application/json" } }
-      );
-    }
-
-    const readableStream = new ReadableStream({
-      async start(controller) {
-        try {
-          for await (const chunk of stream) {
-            const content = chunk.choices[0]?.delta?.content || "";
-            if (content) {
-              // Encode stream chunk in Vercel AI SDK Data Stream protocol
-              controller.enqueue(
-                new TextEncoder().encode(`0:${JSON.stringify(content)}\n`)
-              );
-            }
-          }
-        } catch (error) {
-          controller.error(error);
-        } finally {
-          controller.close();
-        }
-      }
+    // Initialize OpenAI compatible client pointing to HuggingFace router
+    const hfOpenAI = createOpenAI({
+      baseURL: "https://router.huggingface.co/v1",
+      apiKey: hfToken,
     });
 
-    return new Response(readableStream, {
-      headers: { 
-        "Content-Type": "text/plain; charset=utf-8", 
-        "x-vercel-ai-data-stream": "v1" 
-      }
+    const result = streamText({
+      model: hfOpenAI("Qwen/Qwen3.8-27B:preferred"),
+      system: systemPrompt,
+      messages,
+      temperature: 0.1,
     });
+
+    // Use standard Vercel Data Stream protocol response
+    return result.toTextStreamResponse();
   } catch (error) {
     console.error("Error in chat API:", error);
     return new Response(JSON.stringify({ error: "Sorry, I'm having trouble responding right now. Please try again." }), {
