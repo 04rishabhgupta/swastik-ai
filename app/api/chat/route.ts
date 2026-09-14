@@ -8,6 +8,14 @@ const client = new InferenceClient(process.env.HF_TOKEN);
 
 export async function POST(req: Request) {
   try {
+    const hfToken = process.env.HF_TOKEN;
+    if (!hfToken || !hfToken.startsWith("hf_")) {
+      return new Response(
+        JSON.stringify({ error: "Missing or invalid Hugging Face access token (HF_TOKEN) in environment variables. It must start with 'hf_'." }),
+        { status: 500, headers: { "Content-Type": "application/json" } }
+      );
+    }
+
     const { messages } = await req.json();
 
     const knowledgeBase = await getKnowledgeBase();
@@ -18,11 +26,20 @@ export async function POST(req: Request) {
       ...messages
     ];
 
-    const stream = await client.chatCompletionStream({
-      model: "Qwen/Qwen3.8-27B:novita",
-      messages: hfMessages,
-      temperature: 0.1,
-    });
+    let stream;
+    try {
+      stream = await client.chatCompletionStream({
+        model: "Qwen/Qwen3.8-27B:novita",
+        messages: hfMessages,
+        temperature: 0.1,
+      });
+    } catch (apiError) {
+      console.error("HuggingFace API initialization error:", apiError);
+      return new Response(
+        JSON.stringify({ error: "Failed to initialize chat stream with the AI provider." }),
+        { status: 500, headers: { "Content-Type": "application/json" } }
+      );
+    }
 
     const readableStream = new ReadableStream({
       async start(controller) {
