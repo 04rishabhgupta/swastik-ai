@@ -21,9 +21,14 @@ export async function POST(req: Request) {
     const knowledgeBase = await getKnowledgeBase();
     const systemPrompt = getSystemPrompt(knowledgeBase);
 
+    const sanitizedMessages = messages.map((m: any) => ({
+      role: m.role,
+      content: m.content
+    }));
+
     const hfMessages = [
       { role: "system", content: systemPrompt },
-      ...messages
+      ...sanitizedMessages
     ];
 
     let stream;
