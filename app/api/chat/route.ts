@@ -1,13 +1,10 @@
-import { createOpenAI } from "@ai-sdk/openai";
-import { streamText } from "ai";
+import { InferenceClient } from "@huggingface/inference";
 import { getKnowledgeBase } from "@/lib/knowledge";
 import { getSystemPrompt } from "@/lib/prompt";
 
 export const maxDuration = 30;
 
-const openai = createOpenAI({
-  apiKey: process.env.AI_API_KEY || "dummy-key",
-});
+const client = new InferenceClient(process.env.HF_TOKEN);
 
 export async function POST(req: Request) {
   try {
@@ -15,16 +12,44 @@ export async function POST(req: Request) {
 
     const knowledgeBase = await getKnowledgeBase();
     const systemPrompt = getSystemPrompt(knowledgeBase);
-    const model = process.env.AI_MODEL || "gpt-4o-mini";
 
-    const result = streamText({
-      model: openai(model),
-      system: systemPrompt,
-      messages,
-      temperature: 0.1, // Keep temperature low for factual accuracy
+    const hfMessages = [
+      { role: "system", content: systemPrompt },
+      ...messages
+    ];
+
+    const stream = await client.chatCompletionStream({
+      model: "Qwen/Qwen3.8-27B:novita",
+      messages: hfMessages,
+      temperature: 0.1,
     });
 
-    return result.toTextStreamResponse();
+    const readableStream = new ReadableStream({
+      async start(controller) {
+        try {
+          for await (const chunk of stream) {
+            const content = chunk.choices[0]?.delta?.content || "";
+            if (content) {
+              // Encode stream chunk in Vercel AI SDK Data Stream protocol
+              controller.enqueue(
+                new TextEncoder().encode(`0:${JSON.stringify(content)}\n`)
+              );
+            }
+          }
+        } catch (error) {
+          controller.error(error);
+        } finally {
+          controller.close();
+        }
+      }
+    });
+
+    return new Response(readableStream, {
+      headers: { 
+        "Content-Type": "text/plain; charset=utf-8", 
+        "x-vercel-ai-data-stream": "v1" 
+      }
+    });
   } catch (error) {
     console.error("Error in chat API:", error);
     return new Response(JSON.stringify({ error: "Sorry, I'm having trouble responding right now. Please try again." }), {
