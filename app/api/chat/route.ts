@@ -7,10 +7,10 @@ export const maxDuration = 30;
 
 export async function POST(req: Request) {
   try {
-    const hfToken = process.env.HF_TOKEN;
-    if (!hfToken || !hfToken.startsWith("hf_")) {
+    const nvidiaKey = process.env.NVIDIA_API_KEY;
+    if (!nvidiaKey || !nvidiaKey.startsWith("nvapi-")) {
       return new Response(
-        JSON.stringify({ error: "Missing or invalid Hugging Face access token (HF_TOKEN) in environment variables. It must start with 'hf_'." }),
+        JSON.stringify({ error: "Missing or invalid NVIDIA API key (NVIDIA_API_KEY) in environment variables. It must start with 'nvapi-'." }),
         { status: 500, headers: { "Content-Type": "application/json" } }
       );
     }
@@ -20,14 +20,15 @@ export async function POST(req: Request) {
     const knowledgeBase = await getKnowledgeBase();
     const systemPrompt = getSystemPrompt(knowledgeBase);
 
-    // Initialize OpenAI compatible client pointing to HuggingFace router
-    const hfOpenAI = createOpenAI({
-      baseURL: "https://router.huggingface.co/v1",
-      apiKey: hfToken,
+    // Initialize OpenAI compatible client pointing to NVIDIA NIM
+    const nvidiaOpenAI = createOpenAI({
+      baseURL: "https://integrate.api.nvidia.com/v1",
+      apiKey: nvidiaKey,
+      compatibility: "compatible",
     });
 
     const result = streamText({
-      model: hfOpenAI("Qwen/Qwen3.8-27B:preferred"),
+      model: nvidiaOpenAI.chat("mistralai/mistral-nemotron"),
       system: systemPrompt,
       messages,
       temperature: 0.1,
