@@ -24,6 +24,8 @@ export async function POST(req: Request) {
     const nvidiaOpenAI = createOpenAI({
       baseURL: "https://integrate.api.nvidia.com/v1",
       apiKey: nvidiaKey,
+      // @ts-expect-error: compatibility is supported in newer ai-sdk versions but missing in the installed types
+      compatibility: "compatible",
     });
 
     const result = streamText({
