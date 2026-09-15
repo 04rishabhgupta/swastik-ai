@@ -1,3 +1,5 @@
+DEPRICATED REPO
+
 # Clinic AI Information Assistant
 
 A production-quality AI chatbot for a medical clinic. It acts as an informational/administrative assistant to answer patient questions about the clinic based entirely on a local Markdown knowledge base.
